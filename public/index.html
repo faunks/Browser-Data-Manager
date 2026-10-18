@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Browser Data Manager</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Browser Data Manager</h1>
+    <div class="picker">
+      <select id="browserSelect"><option value="">Select browser…</option></select>
+      <select id="profileSelect" disabled><option value="">Select profile…</option></select>
+      <button id="scanBtn" disabled>Scan</button>
+      <button id="zipBtn" disabled title="Pack this profile as a zip you can extract and start with --user-data-dir and --remote-debugging-port">Debug zip…</button>
+    </div>
+  </header>
+
+  <div id="warning" class="warning" hidden>
+    <span id="warnDot" class="dot"></span>
+    <span id="warnText"></span>
+    <button id="endTaskBtn" class="warn-btn" hidden></button>
+  </div>
+
+  <main>
+    <aside id="sidebar">
+      <div class="site-tools" id="siteTools" hidden>
+        <div class="search-wrap">
+          <input id="siteSearch" type="search" placeholder="Search sites…  ( / )" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="chips" id="siteChips">
+          <button class="chip" data-type="cookies" title="Only sites with cookies">Cookies</button>
+          <button class="chip" data-type="localStorage" title="Only sites with localStorage">Storage</button>
+          <button class="chip" data-type="cache" title="Only sites with cache entries">Cache</button>
+        </div>
+        <div class="tools-row">
+          <select id="siteSort" title="Sort">
+            <option value="name">A → Z</option>
+            <option value="data">Most data first</option>
+          </select>
+          <label class="check" title="Hide chrome-extension:// and moz-extension:// entries">
+            <input type="checkbox" id="hideExt" /> Hide extensions
+          </label>
+        </div>
+        <label class="check" title="Site icons come from the browser's own saved icons first. If it has none for a site, download it from the site itself (cached on disk). Turn off to stay fully offline.">
+          <input type="checkbox" id="onlineIcons" /> Download missing icons from the sites
+        </label>
+        <div class="result-count" id="siteCount"></div>
+      </div>
+      <div id="siteList">
+        <div class="empty">Pick a browser and profile, then click Scan.</div>
+      </div>
+    </aside>
+
+    <section id="detail">
+      <div class="detail-bar" id="detailBar" hidden>
+        <span id="detailIcon"></span>
+        <span class="detail-name" id="detailName">No site selected</span>
+        <span class="spacer"></span>
+        <button id="exportBtn" class="bar-btn" title="Export cookies, localStorage and cache for one site, several sites or all of them">Export…</button>
+        <button id="saveAllBtn" class="bar-btn save" disabled title="Save every unsaved edit, in every site (Ctrl/Cmd+Shift+S)">Save all</button>
+        <button id="runBtn" class="bar-btn run" disabled title="Save everything, then open this site in the browser you're editing, using your edited data">▶ Run</button>
+      </div>
+      <div class="tabs">
+        <button class="tab active" data-tab="cookies">Cookies <span id="countCookies"></span></button>
+        <button class="tab" data-tab="localstorage">Local Storage <span id="countLs"></span></button>
+        <button class="tab" data-tab="cache">Cache <span id="countCache"></span></button>
+      </div>
+      <div id="tabContent">
+        <div class="empty">Select a site on the left.</div>
+      </div>
+    </section>
+  </main>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <h2 id="modalTitle"></h2>
+      <p id="modalBody"></p>
+      <div id="modalBtns" class="modal-btns"></div>
+    </div>
+  </div>
+
+  <div id="exportModal" class="modal" hidden>
+    <div class="modal-card export-card" role="dialog" aria-modal="true" aria-labelledby="exportTitle">
+      <h2 id="exportTitle">Export data</h2>
+
+      <div class="exp-section">
+        <div class="exp-label">Sites</div>
+        <label class="exp-opt"><input type="radio" name="expScope" value="current" /> <span id="expCurrentLabel">Current site</span></label>
+        <label class="exp-opt"><input type="radio" name="expScope" value="pick" /> <span>Choose sites… <em id="expPickCount"></em></span></label>
+        <div id="expPicker" class="exp-picker" hidden>
+          <div class="exp-picker-bar">
+            <input id="expSearch" type="search" placeholder="Search sites…" autocomplete="off" spellcheck="false" />
+            <button id="expSelShown" type="button">Select shown</button>
+            <button id="expSelNone" type="button">Clear</button>
+          </div>
+          <div id="expSiteList" class="exp-site-list"></div>
+        </div>
+        <label class="exp-opt" id="expShownRow"><input type="radio" name="expScope" value="shown" /> <span id="expShownLabel"></span></label>
+        <label class="exp-opt"><input type="radio" name="expScope" value="all" /> <span id="expAllLabel"></span></label>
+      </div>
+
+      <div class="exp-section">
+        <div class="exp-label">What to export</div>
+        <label class="exp-opt"><input type="checkbox" id="expEverything" /> <span>Everything</span></label>
+        <label class="exp-opt exp-indent"><input type="checkbox" class="exp-type" value="cookies" /> <span>Cookies</span></label>
+        <label class="exp-opt exp-indent"><input type="checkbox" class="exp-type" value="localStorage" /> <span>Local storage</span></label>
+        <label class="exp-opt exp-indent"><input type="checkbox" class="exp-type" value="cache" /> <span>Cache <em>(listing only: URL, size, date, not the cached files)</em></span></label>
+      </div>
+
+      <div class="exp-summary" id="expSummary"></div>
+
+      <div class="danger-box">
+        <strong>This file can log someone into these accounts as you — no password, no 2FA, nothing else needed.</strong>
+        <p>Cookies are live session keys and localStorage can hold auth tokens. Anyone who gets this file can open
+        it in their own browser and be signed in as you on every site it covers, for as long as those sessions
+        last. Changing your password afterwards does not undo it — only signing out / revoking sessions on each
+        site does.</p>
+        <p>Never attach this to an email, upload it anywhere, send it over chat, or hand it to "support", a
+        colleague, or anyone else. If you need to share browser data with someone, do it a different way (invite
+        them to the account, share a password via a password manager, and so on). Delete this file once you're
+        done with it.</p>
+        <label class="exp-ack"><input type="checkbox" id="expAck" /> I understand this file grants live access to these accounts, and I will not share or upload it.</label>
+      </div>
+
+      <div class="exp-note" id="expPendingNote" hidden></div>
+
+      <div class="exp-btns">
+        <button id="expCancel" type="button">Cancel</button>
+        <button id="expGo" type="button" class="primary" disabled>Export</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="zipModal" class="modal" hidden>
+    <div class="modal-card export-card" role="dialog" aria-modal="true" aria-labelledby="zipTitle">
+      <h2 id="zipTitle">Profile → debug-ready zip</h2>
+      <p>Packs the selected profile as a folder you can extract anywhere and start with <code>--user-data-dir</code> and <code>--remote-debugging-port=9222</code>. Your logins, cookies and storage come along.</p>
+
+      <div class="exp-section">
+        <label class="exp-opt"><input type="checkbox" id="zipCache" /> <span>Include browser cache <em>(much bigger; it rebuilds itself if left out)</em></span></label>
+      </div>
+
+      <div class="exp-summary" id="zipSummary">Calculating…</div>
+      <div class="exp-warn" id="zipRunning" hidden></div>
+
+      <div class="danger-box">
+        <strong>This is your entire browsing identity in a file. Whoever extracts it on their own machine can run a browser that IS you — logged into every account, no password or 2FA prompt.</strong>
+        <p>Cookies and saved passwords are encrypted with a key tied to your OS user account, so this exact copy
+        only decrypts on this computer, signed in as you. It is <em>not</em> anonymized or scoped — it is a full
+        copy of the profile, including every site you're logged into, autofill, and extensions data.</p>
+        <p>Do not send this file to anyone, upload it to cloud storage you don't fully control, or leave it lying
+        around. If this machine or account is shared, or if you're building this for a client or teammate, you
+        are responsible for how that copy of their identity gets used once you hand it over. Delete the zip and
+        the extracted folder as soon as you're done debugging.</p>
+        <label class="exp-ack"><input type="checkbox" id="zipAck" /> I understand this zip grants full, logged-in access to these accounts, and I will keep it private and delete it when I'm done.</label>
+      </div>
+
+      <div class="exp-section">
+        <div class="exp-label">After downloading (change the folder to taste)</div>
+        <pre id="zipCmds" class="zip-cmds"></pre>
+        <button id="zipCopy" type="button">Copy commands</button>
+      </div>
+
+      <div class="exp-btns">
+        <button id="zipCancel" type="button">Close</button>
+        <button id="zipGo" type="button" class="primary" disabled>Download zip</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script src="json-editor.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
